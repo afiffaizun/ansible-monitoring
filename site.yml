@@ -1,0 +1,10 @@
+---
+- name: Setup monitoring stack
+  hosts: monitoring
+  become: true
+  gather_facts: true
+
+  roles:
+    - docker
+    - node_exporter
+    - monitoring_stack

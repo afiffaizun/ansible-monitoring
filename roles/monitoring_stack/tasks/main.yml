@@ -1,0 +1,50 @@
+---
+- name: Create monitoring directory
+  ansible.builtin.file:
+    path: "{{ monitoring_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy docker-compose.yml
+  ansible.builtin.copy:
+    src: docker-compose.yml
+    dest: "{{ monitoring_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Copy Prometheus configuration
+  ansible.builtin.copy:
+    src: prometheus.yml
+    dest: "{{ monitoring_dir }}/prometheus.yml"
+    mode: "0644"
+
+- name: Copy Loki configuration
+  ansible.builtin.copy:
+    src: loki-config.yml
+    dest: "{{ monitoring_dir }}/loki-config.yml"
+    mode: "0644"
+
+- name: Copy Promtail configuration
+  ansible.builtin.template:
+    src: promtail-config.yml.j2
+    dest: "{{ monitoring_dir }}/promtail-config.yml"
+    mode: "0644"
+
+- name: Copy Grafana datasource provisioning
+  ansible.builtin.copy:
+    src: grafana-datasources.yml
+    dest: "{{ monitoring_dir }}/grafana-datasources.yml"
+    mode: "0644"
+
+- name: Generate .env file for Docker Compose
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ monitoring_dir }}/.env"
+    mode: "0600"
+
+- name: Deploy monitoring stack with Docker Compose
+  ansible.builtin.shell: |
+    docker compose up -d --remove-orphans --force-recreate
+  args:
+    chdir: "{{ monitoring_dir }}"
+  register: compose_result
+  changed_when: compose_result.rc == 0

@@ -1,0 +1,8 @@
+---
+- name: Restart monitoring stack
+  ansible.builtin.shell: |
+    docker compose down --remove-orphans
+    docker compose up -d --remove-orphans 
+  
+  args:
+    chdir: "{{ monitoring_dir }}"
