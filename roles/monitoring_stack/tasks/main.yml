@@ -48,3 +48,60 @@
     chdir: "{{ monitoring_dir }}"
   register: compose_result
   changed_when: compose_result.rc == 0
+
+- name: Create Grafana provisioning directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ monitoring_dir }}/provisioning/dashboards"
+    - "{{ monitoring_dir }}/provisioning/dashboards/json"
+
+- name: Copy Grafana dashboard provisioning config
+  ansible.builtin.copy:
+    dest: "{{ monitoring_dir }}/provisioning/dashboards/dashboards.yml"
+    content: |
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: 'VPS Monitoring'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/provisioning/dashboards/json
+            foldersFromFilesStructure: false
+    mode: "0644"
+
+- name: Copy Grafana dashboard JSON
+  ansible.builtin.copy:
+    src: grafana-dashboard.json
+    dest: "{{ monitoring_dir }}/grafana-dashboard.json"
+    mode: "0644"
+
+- name: Wait for Grafana to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ grafana_port }}/api/health"
+    method: GET
+    return_content: yes
+  register: grafana_health
+  until: grafana_health.status == 200
+  retries: 30
+  delay: 5
+
+- name: Restart Grafana to reload dashboard provisioning
+  ansible.builtin.shell: docker restart grafana
+  register: grafana_restart
+  changed_when: grafana_restart.rc == 0
+
+- name: Wait for Grafana to be ready after restart
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ grafana_port }}/api/health"
+    method: GET
+    return_content: yes
+  register: grafana_health_after
+  until: grafana_health_after.status == 200
+  retries: 30
+  delay: 5

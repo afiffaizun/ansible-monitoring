@@ -7,25 +7,32 @@ Automated deployment of a full monitoring stack using Ansible, consisting of Pro
 - Ansible installed on your local machine
 - SSH access to target server (Ubuntu)
 - Target server has internet access
+- UFW firewall configured (Docker networks allowed)
 
 ## Project Structure
 
 ```
 ansible-monitoring/
-├── inventory                 # Target server definition
-├── site.yml                  # Main playbook
+├── inventory                     # Target server definition
+├── inventory.cfg                 # Ansible configuration
+├── site.yml                      # Main playbook
 ├── group_vars/
-│   └── all.yml               # Variables (credentials, ports, etc.)
+│   └── all.yml                   # Variables (credentials, ports, etc.)
 ├── roles/
-│   ├── docker/               # Docker installation
-│   ├── node_exporter/        # Node Exporter container
-│   └── monitoring_stack/     # Prometheus, Grafana, Loki, Promtail
+│   ├── docker/                   # Docker installation + Loki plugin
+│   ├── node_exporter/            # Node Exporter container
+│   └── monitoring_stack/         # Prometheus, Grafana, Loki, Promtail
+│       ├── tasks/main.yml
+│       ├── handlers/main.yml
+│       └── templates/
+│           ├── env.j2
+│           └── promtail-config.yml.j2
 └── files/
-    ├── docker-compose.yml    # Docker Compose definition
-    ├── prometheus.yml        # Prometheus configuration
-    ├── grafana-datasources.yml
-    ├── loki-config.yml
-    └── promtail-config.yml
+    ├── docker-compose.yml        # Docker Compose definition
+    ├── prometheus.yml            # Prometheus configuration
+    ├── grafana-datasources.yml   # Grafana datasource provisioning
+    ├── grafana-dashboard.json    # Grafana dashboard template
+    └── loki-config.yml           # Loki configuration
 ```
 
 ## Configuration
@@ -48,6 +55,7 @@ Edit `group_vars/all.yml` to customize:
 | `prometheus_retention_time` | `15d` | Prometheus data retention |
 | `prometheus_retention_size` | `8GB` | Prometheus max storage size |
 | `loki_retention` | `336h` | Loki log retention (14 days) |
+| `node_exporter_port` | `9100` | Node Exporter port |
 | `monitoring_instance_name` | `monitoring-vps` | Instance label for metrics |
 
 ## How to Run
@@ -76,6 +84,20 @@ ansible-playbook -i inventory site.yml -e "grafana_admin_password=mysecret"
 
 > All services bind to `127.0.0.1` by default. Use SSH tunnel or reverse proxy to access remotely.
 
+## Firewall Configuration
+
+UFW must allow Docker networks to access Node Exporter (port 9100):
+
+```bash
+# Allow Docker bridge network
+sudo ufw allow from 172.17.0.0/16 to any port 9100
+
+# Allow monitoring network
+sudo ufw allow from 172.19.0.0/16 to any port 9100
+```
+
+> Without these rules, Prometheus cannot scrape Node Exporter metrics.
+
 ## Access Services via SSH Tunnel
 
 ```bash
@@ -93,7 +115,26 @@ Then open in browser:
 - Grafana: `http://localhost:3000`
 - Prometheus: `http://localhost:9090`
 
-## Pre-configured Grafana Datasources
+## Grafana Dashboard
+
+Dashboard **"VPS Monitoring Dashboard"** is auto-imported to folder **"VPS Monitoring"**.
+
+### Dashboard Panels
+
+| Row | Panel | Type | Description |
+|-----|-------|------|-------------|
+| System Overview | CPU Usage | Gauge | Current CPU utilization |
+| System Overview | Memory Usage | Gauge | Current memory utilization |
+| System Overview | Disk Usage (/) | Gauge | Root filesystem usage |
+| System Overview | Uptime | Stat | System uptime |
+| CPU & Memory | CPU Usage Over Time | Time series | CPU user/system/iowait |
+| CPU & Memory | Memory Usage Over Time | Time series | Used/cached/buffers/available |
+| Disk & Network | Network Traffic | Time series | RX/TX per interface |
+| Disk & Network | Disk I/O | Time series | Read/write bytes per device |
+| Logs | Docker Container Logs | Logs | All container logs (Loki) |
+| Logs | System Logs | Logs | syslog/authlog/journal (Loki) |
+
+### Datasources
 
 - **Prometheus** — for metrics queries
 - **Loki** — for log queries
@@ -119,4 +160,50 @@ cd /opt/monitoring && docker compose down
 
 # Update containers
 cd /opt/monitoring && docker compose pull && docker compose up -d
+```
+
+## Troubleshooting
+
+### Loki DNS Resolution Failed
+
+**Error:** `dial tcp: lookup loki on 127.0.0.11:53: server misbehaving`
+
+**Solution:**
+```bash
+# Restart Docker daemon
+sudo systemctl restart docker
+
+# Recreate monitoring stack
+cd /opt/monitoring && docker compose down && docker compose up -d
+```
+
+### Node Exporter Not Accessible from Prometheus
+
+**Error:** Prometheus targets showing `down` status
+
+**Solution:**
+```bash
+# Check UFW rules
+sudo ufw status
+
+# Allow Docker networks
+sudo ufw allow from 172.17.0.0/16 to any port 9100
+sudo ufw allow from 172.19.0.0/16 to any port 9100
+```
+
+### Loki Config Parse Error
+
+**Error:** `yaml: unmarshal errors: field X not found`
+
+**Solution:** Check `files/loki-config.yml` structure matches Loki 3.x format.
+
+### Grafana Dashboard Not Imported
+
+**Solution:**
+```bash
+# Check provisioning logs
+docker logs grafana | grep -i provisioning
+
+# Restart Grafana
+docker restart grafana
 ```
