@@ -18,6 +18,8 @@ ansible-monitoring/
 ├── site.yml                      # Main playbook
 ├── group_vars/
 │   └── all.yml                   # Variables (credentials, ports, etc.)
+├── dashboard/
+│   └── vps-monitoring.json       # VPS monitoring dashboard
 ├── roles/
 │   ├── docker/                   # Docker installation + Loki plugin
 │   ├── node_exporter/            # Node Exporter container
@@ -31,7 +33,6 @@ ansible-monitoring/
     ├── docker-compose.yml        # Docker Compose definition
     ├── prometheus.yml            # Prometheus configuration
     ├── grafana-datasources.yml   # Grafana datasource provisioning
-    ├── grafana-dashboard.json    # Grafana dashboard template
     └── loki-config.yml           # Loki configuration
 ```
 
@@ -118,6 +119,10 @@ Then open in browser:
 ## Grafana Dashboard
 
 Dashboard **"VPS Monitoring Dashboard"** is auto-imported to folder **"VPS Monitoring"**.
+
+| Dashboard | File | Description |
+|-----------|------|-------------|
+| VPS Monitoring Dashboard | `vps-monitoring.json` | CPU, Memory, Disk, Network, Logs |
 
 ### Dashboard Panels
 

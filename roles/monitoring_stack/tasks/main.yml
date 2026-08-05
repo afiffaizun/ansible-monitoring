@@ -75,11 +75,13 @@
             foldersFromFilesStructure: false
     mode: "0644"
 
-- name: Copy Grafana dashboard JSON
+- name: Copy Grafana dashboards
   ansible.builtin.copy:
-    src: grafana-dashboard.json
-    dest: "{{ monitoring_dir }}/grafana-dashboard.json"
+    src: "{{ item }}"
+    dest: "{{ monitoring_dir }}/dashboard/{{ item | basename }}"
     mode: "0644"
+  loop:
+    - dashboard/vps-monitoring.json
 
 - name: Wait for Grafana to be ready
   ansible.builtin.uri:
