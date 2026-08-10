@@ -60,6 +60,8 @@ jobs:
 
       - name: Ansible dry-run
         run: ansible-playbook -i inventory site.yml --vault-password-file .vault_pass --check
+        env:
+          ANSIBLE_CONFIG: ansible.cfg
 
   deploy:
     name: Deploy
@@ -94,3 +96,5 @@ jobs:
 
       - name: Deploy monitoring stack
         run: ansible-playbook -i inventory site.yml --vault-password-file .vault_pass
+        env:
+          ANSIBLE_CONFIG: ansible.cfg
