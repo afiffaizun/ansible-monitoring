@@ -47,6 +47,9 @@
     chdir: "{{ monitoring_dir }}"
   register: monitoring_stack_compose_result
   changed_when: monitoring_stack_compose_result.rc == 0
+  until: monitoring_stack_compose_result.rc == 0
+  retries: 5
+  delay: 10
 
 - name: Create Grafana provisioning directories
   ansible.builtin.file:
