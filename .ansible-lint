@@ -1,0 +1,15 @@
+---
+# Ansible Lint configuration
+skip_list:
+  - yaml[line-length]
+  - no-changed-when
+  - command-instead-of-module
+  - risky-file-permissions
+
+warn_list:
+  - role-name
+  - package-latest
+
+exclude_paths:
+  - .git/
+  - .github/
