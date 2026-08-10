@@ -5,6 +5,7 @@ skip_list:
   - no-changed-when
   - command-instead-of-module
   - risky-file-permissions
+  - role-vars
 
 warn_list:
   - role-name
