@@ -42,12 +42,11 @@
     mode: "0600"
 
 - name: Deploy monitoring stack with Docker Compose
-  ansible.builtin.shell: |
-    docker compose up -d --remove-orphans --force-recreate
+  ansible.builtin.command: docker compose up -d --remove-orphans --force-recreate
   args:
     chdir: "{{ monitoring_dir }}"
-  register: compose_result
-  changed_when: compose_result.rc == 0
+  register: monitoring_stack_compose_result
+  changed_when: monitoring_stack_compose_result.rc == 0
 
 - name: Create Grafana provisioning directories
   ansible.builtin.file:
@@ -87,23 +86,23 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ grafana_port }}/api/health"
     method: GET
-    return_content: yes
-  register: grafana_health
-  until: grafana_health.status == 200
+    return_content: true
+  register: monitoring_stack_grafana_health
+  until: monitoring_stack_grafana_health.status == 200
   retries: 30
   delay: 5
 
 - name: Restart Grafana to reload dashboard provisioning
-  ansible.builtin.shell: docker restart grafana
-  register: grafana_restart
-  changed_when: grafana_restart.rc == 0
+  ansible.builtin.command: docker restart grafana
+  register: monitoring_stack_grafana_restart
+  changed_when: monitoring_stack_grafana_restart.rc == 0
 
 - name: Wait for Grafana to be ready after restart
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ grafana_port }}/api/health"
     method: GET
-    return_content: yes
-  register: grafana_health_after
-  until: grafana_health_after.status == 200
+    return_content: true
+  register: monitoring_stack_grafana_health_after
+  until: monitoring_stack_grafana_health_after.status == 200
   retries: 30
   delay: 5
