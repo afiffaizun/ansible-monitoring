@@ -12,7 +12,7 @@
     state: started
     restart_policy: unless-stopped
     network_mode: host
-    pid_mode: host  
+    pid_mode: host
     volumes:
       - /:/host:ro,rslave
     command: --path.rootfs=/host
