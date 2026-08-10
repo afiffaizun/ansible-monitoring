@@ -45,12 +45,13 @@ jobs:
           pip install ansible
           ansible-galaxy collection install -r requirements.yml
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 43.157.204.137 >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: ssh-keyscan -H 43.157.204.137 >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Setup vault password
         run: |
@@ -78,12 +79,13 @@ jobs:
           pip install ansible
           ansible-galaxy collection install -r requirements.yml
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 43.157.204.137 >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: ssh-keyscan -H 43.157.204.137 >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Setup vault password
         run: |
