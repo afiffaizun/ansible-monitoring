@@ -3,9 +3,8 @@ monitoring_dir: /opt/monitoring
 
 #Grafana
 grafana_admin_user: admin
-grafana_admin_password: admin
+# grafana_admin_password di-vault di group_vars/all/vault.yml
 grafana_port: 3000
-
 
 #Prometheus
 prometheus_retention_time: 15d

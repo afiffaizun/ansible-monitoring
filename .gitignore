@@ -1,0 +1,14 @@
+# Ansible Vault password file
+.vault_pass
+
+# Ansible retry files
+*.retry
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
