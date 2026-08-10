@@ -1,16 +1,16 @@
 # Server
 monitoring_dir: /opt/monitoring
 
-#Grafana
+# Grafana
 grafana_admin_user: admin
 # grafana_admin_password di-vault di group_vars/all/vault.yml
 grafana_port: 3000
 
-#Prometheus
+# Prometheus
 prometheus_retention_time: 15d
 prometheus_retention_size: 8GB
 
-#Loki
+# Loki
 loki_retention: 336h
 
 node_exporter_port: 9100

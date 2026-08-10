@@ -77,6 +77,6 @@
     docker plugin install grafana/loki-docker-driver:latest
     --alias loki
     --grant-all-permissions
-  register: plugin_install
-  failed_when: plugin_install.rc != 0 and 'already exists' not in plugin_install.stderr
-  changed_when: "'installed' in plugin_install.stderr"
+  register: docker_plugin_install
+  failed_when: docker_plugin_install.rc != 0 and 'already exists' not in docker_plugin_install.stderr
+  changed_when: "'installed' in docker_plugin_install.stderr"
