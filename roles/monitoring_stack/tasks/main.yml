@@ -17,9 +17,21 @@
     dest: "{{ monitoring_dir }}/prometheus.yml"
     mode: "0644"
 
-- name: Copy Loki configuration
+- name: Copy Prometheus alerting and recording rules
   ansible.builtin.copy:
-    src: loki-config.yml
+    src: prometheus-rules.yml
+    dest: "{{ monitoring_dir }}/prometheus-rules.yml"
+    mode: "0644"
+
+- name: Copy Alertmanager configuration
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ monitoring_dir }}/alertmanager.yml"
+    mode: "0644"
+
+- name: Copy Loki configuration
+  ansible.builtin.template:
+    src: loki-config.yml.j2
     dest: "{{ monitoring_dir }}/loki-config.yml"
     mode: "0644"
 
@@ -84,6 +96,7 @@
     mode: "0644"
   loop:
     - dashboard/vps-monitoring.json
+    - dashboard/vps-containers.json
 
 - name: Wait for Grafana to be ready
   ansible.builtin.uri:
