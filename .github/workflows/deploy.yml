@@ -4,6 +4,8 @@ name: Deploy Monitoring Stack
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -30,6 +32,7 @@ jobs:
   dry-run:
     name: Dry Run
     needs: lint
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -66,6 +69,7 @@ jobs:
   deploy:
     name: Deploy
     needs: dry-run
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
