@@ -14,6 +14,6 @@ prometheus_retention_size: 8GB
 # Loki
 loki_retention: 336h
 
-node_exporter_port: 9100
+node_exporter_port: 9100 
 
 monitoring_instance_name: monitoring-vps
