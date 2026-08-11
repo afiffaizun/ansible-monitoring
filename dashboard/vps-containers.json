@@ -194,23 +194,15 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [
-            {
-              "options": { "0": { "color": "green", "text": "Never restarted" } },
-              "type": "value",
-              "value": "0"
-            }
-          ],
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 5 }
+              { "color": "green", "value": null }
             ]
           },
-          "unit": "short"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -220,12 +212,12 @@
         "legend": { "calcs": ["max", "lastNotNull"], "displayMode": "table", "placement": "bottom" },
         "tooltip": { "mode": "single", "sort": "desc" }
       },
-      "title": "Container Restarts",
+      "title": "Container Uptime",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "container_restart_count{name!=\"\"}",
+          "expr": "container_last_seen{name!=\"\"} - container_start_time_seconds{name!=\"\"}",
           "legendFormat": "{{ name }}",
           "refId": "A"
         }
