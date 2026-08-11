@@ -20,13 +20,13 @@ receivers:
         chat_id: {{ alertmanager_telegram_chat_id }}
         parse_mode: HTML
         message: |-
-          {{ range .Alerts }}{{ if eq .Status "firing" }}<b>🔥 {{ .Labels.alertname }}</b>{{ else }}<b>✅ Resolved: {{ .Labels.alertname }}</b>{{ end }}
+          {% raw %}{{ range .Alerts }}{{ if eq .Status "firing" }}<b>🔥 {{ .Labels.alertname }}</b>{{ else }}<b>✅ Resolved: {{ .Labels.alertname }}</b>{{ end }}
           Severity: {{ .Labels.severity }}
           Instance: {{ .Labels.instance }}
           {{ .Annotations.summary }}
           {{ .Annotations.description }}
 
-          {{ end }}
+          {{ end }}{% endraw %}
 
 inhibit_rules:
   - source_matchers:
