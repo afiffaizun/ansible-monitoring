@@ -228,7 +228,22 @@
   "schemaVersion": 39,
   "tags": ["vps", "containers"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
   },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
