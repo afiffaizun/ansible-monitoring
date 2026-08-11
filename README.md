@@ -1,6 +1,6 @@
 # Ansible Monitoring Stack
 
-Automated deployment of a full monitoring stack using Ansible, consisting of Prometheus, Grafana, Loki, Promtail, and Node Exporter on a remote server.
+Automated deployment of a full monitoring stack using Ansible, consisting of Prometheus, Grafana, Loki, Promtail, Node Exporter, cAdvisor, and Alertmanager (with Telegram alerts) on a remote server.
 
 ## Prerequisites
 
@@ -24,25 +24,28 @@ ansible-monitoring/
 ├── group_vars/
 │   └── all/
 │       ├── vars.yml              # Variables (ports, retention, paths)
-│       └── vault.yml             # Encrypted secrets (grafana_admin_password)
+│       └── vault.yml             # Encrypted secrets (grafana_admin_password, telegram)
 ├── .github/workflows/
 │   └── deploy.yml                # CI/CD: Lint → Dry Run → Deploy
 ├── dashboard/
-│   └── vps-monitoring.json       # VPS monitoring dashboard
+│   ├── vps-monitoring.json       # VPS host monitoring dashboard
+│   └── vps-containers.json       # Container monitoring dashboard (cAdvisor)
 ├── files/
 │   ├── docker-compose.yml        # Docker Compose definition
 │   ├── prometheus.yml            # Prometheus configuration
-│   ├── grafana-datasources.yml   # Grafana datasource provisioning
-│   └── loki-config.yml           # Loki configuration
+│   ├── prometheus-rules.yml      # Alerting & recording rules
+│   └── grafana-datasources.yml   # Grafana datasource provisioning
 └── roles/
     ├── docker/                   # Docker installation + Loki plugin
     ├── node_exporter/            # Node Exporter container
-    └── monitoring_stack/         # Prometheus, Grafana, Loki, Promtail
+    └── monitoring_stack/         # Prometheus, Grafana, Loki, Promtail, cAdvisor, Alertmanager
         ├── tasks/main.yml
         ├── handlers/main.yml
         └── templates/
             ├── env.j2
-            └── promtail-config.yml.j2
+            ├── promtail-config.yml.j2
+            ├── loki-config.yml.j2      # Loki config (retention templated)
+            └── alertmanager.yml.j2     # Alertmanager config (Telegram)
 ```
 
 ## Configuration
@@ -69,7 +72,7 @@ Edit `group_vars/all/vars.yml` to customize:
 
 ### Ansible Vault (Secrets)
 
-The Grafana admin password is stored encrypted in `group_vars/all/vault.yml`:
+The Grafana admin password and Telegram bot credentials are stored encrypted in `group_vars/all/vault.yml`:
 
 ```bash
 # Edit encrypted secrets
@@ -82,17 +85,26 @@ ansible-vault encrypt group_vars/all/vault.yml
 ansible-vault view group_vars/all/vault.yml
 ```
 
+Contents:
+- `grafana_admin_password` — Grafana admin password
+- `alertmanager_telegram_bot_token` — Telegram bot HTTP API token
+- `alertmanager_telegram_chat_id` — Telegram chat ID to receive alerts
+
 The vault password is stored locally in `.vault_pass` (gitignored, `chmod 600`). The same file is replicated to the CI runner / server where needed. Do **not** commit `.vault_pass` or other plaintext secrets.
 
 ## How to Run
 
-Install collections first:
+### Prerequisites (once)
 
-```bash
-ansible-galaxy collection install -r requirements.yml
-```
+1. Install Ansible + collections:
+   ```bash
+   pip install ansible ansible-lint
+   ansible-galaxy collection install -r requirements.yml
+   ```
+2. Create `.vault_pass` containing the vault password (`chmod 600 .vault_pass`). It is gitignored.
+3. Point `inventory` at your server (see Configuration).
 
-Deploy:
+### Deploy
 
 ```bash
 # Deploy full stack (use .vault_pass if present)
@@ -101,9 +113,21 @@ ansible-playbook site.yml --vault-password-file .vault_pass
 # Or prompt for the vault password interactively
 ansible-playbook site.yml --ask-vault-pass
 
-# Deploy with verbose output
-ansible-playbook site.yml --vault-password-file .vault_pass -v
+# Dry run first (no changes applied)
+ansible-playbook site.yml --vault-password-file .vault_pass --check
 ```
+
+### Access dashboards
+
+```bash
+ssh monitoring-vps
+```
+
+Then open:
+- Grafana: `http://localhost:3000` (login `admin` / vault password)
+- Prometheus: `http://localhost:9090`
+- Alertmanager: `http://localhost:9093`
+- Loki API: `http://localhost:3100`
 
 ## CI/CD Pipeline
 
@@ -164,6 +188,7 @@ Host monitoring-vps
   IdentityFile ~/.ssh/id_ed25519
   LocalForward 3000 127.0.0.1:3000
   LocalForward 9090 127.0.0.1:9090
+  LocalForward 9093 127.0.0.1:9093
   LocalForward 3100 127.0.0.1:3100
 ```
 
@@ -176,7 +201,7 @@ ssh monitoring-vps
 ### Option B — One-liner (no config)
 
 ```bash
-ssh -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 3100:127.0.0.1:3100 <USER>@<SERVER_IP>
+ssh -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 9093:127.0.0.1:9093 -L 3100:127.0.0.1:3100 <USER>@<SERVER_IP>
 ```
 
 ### Service URLs
@@ -253,9 +278,9 @@ Dashboard **"VPS Monitoring Dashboard"** and **"VPS Container Monitoring"** are 
 | Dashboard | File | Description |
 |-----------|------|-------------|
 | VPS Monitoring Dashboard | `vps-monitoring.json` | CPU, Memory, Disk, Network, Logs |
-| VPS Container Monitoring | `vps-containers.json` | Per-container CPU, Memory, Network, Restarts |
+| VPS Container Monitoring | `vps-containers.json` | Per-container CPU, Memory, Network, Uptime |
 
-### Dashboard Panels
+### Dashboard Panels — VPS Monitoring Dashboard
 
 | Row | Panel | Type | Description |
 |-----|-------|------|-------------|
@@ -269,6 +294,15 @@ Dashboard **"VPS Monitoring Dashboard"** and **"VPS Container Monitoring"** are 
 | Disk & Network | Disk I/O | Time series | Read/write bytes per device |
 | Logs | Docker Container Logs | Logs | All container logs (Loki) |
 | Logs | System Logs | Logs | syslog/authlog/journal (Loki) |
+
+### Dashboard Panels — VPS Container Monitoring
+
+| Panel | Type | Description |
+|-------|------|-------------|
+| Container CPU Usage | Time series | CPU % of quota per container |
+| Container Memory Usage | Time series | Memory bytes per container |
+| Network I/O | Time series | RX/TX rate per container |
+| Container Uptime | Time series | Uptime per container (resets on restart) |
 
 ### Datasources
 
@@ -287,6 +321,8 @@ docker logs grafana
 docker logs loki
 docker logs promtail
 docker logs node_exporter
+docker logs cadvisor
+docker logs alertmanager
 
 # Restart stack
 cd /opt/monitoring && docker compose restart
@@ -331,7 +367,7 @@ sudo ufw allow from 172.19.0.0/16 to any port 9100
 
 **Error:** `yaml: unmarshal errors: field X not found`
 
-**Solution:** Check `files/loki-config.yml` structure matches Loki 3.x format.
+**Solution:** Check `roles/monitoring_stack/templates/loki-config.yml.j2` structure matches Loki 3.x format (rendered to `{{ monitoring_dir }}/loki-config.yml` on the server).
 
 ### Grafana Dashboard Not Imported
 
@@ -349,3 +385,27 @@ docker restart grafana
 **Error:** `Attempting to decrypt but no vault secrets found`
 
 **Solution:** Ensure `.vault_pass` exists locally (gitignored) or pass it with `--vault-password-file`, or install vault ops running locally with collections installed (`pip install ansible ansible-lint`).
+
+### Telegram Alerts Not Sent
+
+**Symptoms:** No Telegram notification arrives; Alertmanager logs show `permission denied` on `/data/silences` or `/data/nflog`.
+
+**Cause:** Alertmanager runs as `nobody` (uid 65534) but the `alertmanager_data` volume is root-owned.
+
+**Solution:** The compose service runs with `user: "0:0"` (root). After deploy, verify:
+```bash
+docker exec alertmanager id          # should show uid=0(root)
+docker logs alertmanager | grep -i "notify success"
+```
+
+### cAdvisor Reports Only Host Metrics (Docker 29 + containerd-snapshotter)
+
+**Symptom:** No per-container metrics; `container_cpu_usage_seconds_total` only returns `id="/"`; cAdvisor logs show `failed to identify the read-write layer ID ... mount-id: no such file or directory`.
+
+**Cause:** Docker 29 uses the containerd-snapshotter storage backend (`overlayfs`/`io.containerd.snapshotter.v1`), where layers live under `/var/lib/containerd/...` instead of `/var/lib/docker/image/...`. Old cAdvisor versions (e.g. `v0.49.1` on `gcr.io`) don't support this.
+
+**Solution:** Use cAdvisor `ghcr.io/google/cadvisor:v0.60.5` (already configured) with `--docker_only=true` and `--disable_metrics=disk` (avoids the layerdb path; host disk is still covered by Node Exporter). Verify:
+```bash
+docker logs cadvisor | grep "Registration of the docker container factory successfully"
+curl -s 'http://localhost:9090/api/v1/query?query=container_cpu_usage_seconds_total%7Bname!%3D%22%22%7D'
+```
