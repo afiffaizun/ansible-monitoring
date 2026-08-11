@@ -8,32 +8,41 @@ Automated deployment of a full monitoring stack using Ansible, consisting of Pro
 - SSH access to target server (Ubuntu)
 - Target server has internet access
 - UFW firewall configured (Docker networks allowed)
+- Ansible collections from `requirements.yml`
+- Secret vars stored in an Ansible Vault (password file: `.vault_pass`, gitignored)
 
 ## Project Structure
 
 ```
 ansible-monitoring/
+├── ansible.cfg                   # Ansible configuration (inventory, SSH, callbacks)
 ├── inventory                     # Target server definition
-├── inventory.cfg                 # Ansible configuration
 ├── site.yml                      # Main playbook
+├── requirements.yml              # Ansible collections (community.docker, ansible.posix)
+├── .ansible-lint                 # ansible-lint rules configuration
+├── .gitignore                    # Excludes .vault_pass, retry files, etc.
 ├── group_vars/
-│   └── all.yml                   # Variables (credentials, ports, etc.)
+│   └── all/
+│       ├── vars.yml              # Variables (ports, retention, paths)
+│       └── vault.yml             # Encrypted secrets (grafana_admin_password)
+├── .github/workflows/
+│   └── deploy.yml                # CI/CD: Lint → Dry Run → Deploy
 ├── dashboard/
 │   └── vps-monitoring.json       # VPS monitoring dashboard
-├── roles/
-│   ├── docker/                   # Docker installation + Loki plugin
-│   ├── node_exporter/            # Node Exporter container
-│   └── monitoring_stack/         # Prometheus, Grafana, Loki, Promtail
-│       ├── tasks/main.yml
-│       ├── handlers/main.yml
-│       └── templates/
-│           ├── env.j2
-│           └── promtail-config.yml.j2
-└── files/
-    ├── docker-compose.yml        # Docker Compose definition
-    ├── prometheus.yml            # Prometheus configuration
-    ├── grafana-datasources.yml   # Grafana datasource provisioning
-    └── loki-config.yml           # Loki configuration
+├── files/
+│   ├── docker-compose.yml        # Docker Compose definition
+│   ├── prometheus.yml            # Prometheus configuration
+│   ├── grafana-datasources.yml   # Grafana datasource provisioning
+│   └── loki-config.yml           # Loki configuration
+└── roles/
+    ├── docker/                   # Docker installation + Loki plugin
+    ├── node_exporter/            # Node Exporter container
+    └── monitoring_stack/         # Prometheus, Grafana, Loki, Promtail
+        ├── tasks/main.yml
+        ├── handlers/main.yml
+        └── templates/
+            ├── env.j2
+            └── promtail-config.yml.j2
 ```
 
 ## Configuration
@@ -45,13 +54,12 @@ Edit `inventory` to set your server:
 vps ansible_host=<IP_ADDRESS> ansible_user=<USER> ansible_ssh_private_key_file=<SSH_KEY_PATH>
 ```
 
-Edit `group_vars/all.yml` to customize:
+Edit `group_vars/all/vars.yml` to customize:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `monitoring_dir` | `/opt/monitoring` | Installation directory on server |
 | `grafana_admin_user` | `admin` | Grafana admin username |
-| `grafana_admin_password` | `admin` | Grafana admin password |
 | `grafana_port` | `3000` | Grafana web port |
 | `prometheus_retention_time` | `15d` | Prometheus data retention |
 | `prometheus_retention_size` | `8GB` | Prometheus max storage size |
@@ -59,18 +67,58 @@ Edit `group_vars/all.yml` to customize:
 | `node_exporter_port` | `9100` | Node Exporter port |
 | `monitoring_instance_name` | `monitoring-vps` | Instance label for metrics |
 
-## How to Run
+### Ansible Vault (Secrets)
+
+The Grafana admin password is stored encrypted in `group_vars/all/vault.yml`:
 
 ```bash
-# Deploy full stack
-ansible-playbook -i inventory site.yml
+# Edit encrypted secrets
+ansible-vault edit group_vars/all/vault.yml
+
+# Encrypt a new file
+ansible-vault encrypt group_vars/all/vault.yml
+
+# View decrypted content
+ansible-vault view group_vars/all/vault.yml
+```
+
+The vault password is stored locally in `.vault_pass` (gitignored, `chmod 600`). The same file is replicated to the CI runner / server where needed. Do **not** commit `.vault_pass` or other plaintext secrets.
+
+## How to Run
+
+Install collections first:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
+
+Deploy:
+
+```bash
+# Deploy full stack (use .vault_pass if present)
+ansible-playbook site.yml --vault-password-file .vault_pass
+
+# Or prompt for the vault password interactively
+ansible-playbook site.yml --ask-vault-pass
 
 # Deploy with verbose output
-ansible-playbook -i inventory site.yml -v
-
-# Deploy with extra variables
-ansible-playbook -i inventory site.yml -e "grafana_admin_password=mysecret"
+ansible-playbook site.yml --vault-password-file .vault_pass -v
 ```
+
+## CI/CD Pipeline
+
+`.github/workflows/deploy.yml` runs on `main` push and pull requests. The `Lint` job is a **required status check** — PRs cannot be merged until `ansible-lint` passes.
+
+| Job | Trigger | Description |
+|-----|---------|-------------|
+| **Lint** | push, PR, manual | Runs `ansible-lint` |
+| **Dry Run** | push to main, manual | `ansible-playbook --check` against VPS |
+| **Deploy** | push to main, manual | Full deploy to VPS |
+
+Required GitHub Secrets:
+
+- `SSH_PRIVATE_KEY` — private key to access the VPS
+- `VAULT_PASSWORD` — password for `group_vars/all/vault.yml`
 
 ## What Gets Deployed
 
@@ -101,20 +149,43 @@ sudo ufw allow from 172.19.0.0/16 to any port 9100
 
 ## Access Services via SSH Tunnel
 
-```bash
-# Grafana
-ssh -L 3000:127.0.0.1:3000 <user>@<server_ip>
+All services bind to `127.0.0.1`, so you need a single SSH tunnel forwarding all three ports:
 
-# Prometheus
-ssh -L 9090:127.0.0.1:9090 <user>@<server_ip>
+### Option A — SSH config alias (recommended, already configured)
 
-# Loki
-ssh -L 3100:127.0.0.1:3100 <user>@<server_ip>
+Add to `~/.ssh/config`:
+
+```
+Host monitoring-vps
+  HostName <SERVER_IP>
+  User <USER>
+  IdentityFile ~/.ssh/id_ed25519
+  LocalForward 3000 127.0.0.1:3000
+  LocalForward 9090 127.0.0.1:9090
+  LocalForward 3100 127.0.0.1:3100
 ```
 
-Then open in browser:
-- Grafana: `http://localhost:3000`
-- Prometheus: `http://localhost:9090`
+Then a single command forwards all ports:
+
+```bash
+ssh monitoring-vps
+```
+
+### Option B — One-liner (no config)
+
+```bash
+ssh -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 3100:127.0.0.1:3100 <USER>@<SERVER_IP>
+```
+
+### Service URLs
+
+| Service | URL |
+|---------|-----|
+| Grafana | `http://localhost:3000` |
+| Prometheus | `http://localhost:9090` |
+| Loki | `http://localhost:3100` |
+
+> Note: With aliases, once the tunnel is up, multiple services can be opened in parallel browser tabs. To close the tunnel run `pkill -f "ssh -N -o ExitOnForwardFailure"`.
 
 ## Grafana Dashboard
 
@@ -212,3 +283,9 @@ docker logs grafana | grep -i provisioning
 # Restart Grafana
 docker restart grafana
 ```
+
+### Vault Password Required to Deploy
+
+**Error:** `Attempting to decrypt but no vault secrets found`
+
+**Solution:** Ensure `.vault_pass` exists locally (gitignored) or pass it with `--vault-password-file`, or install vault ops running locally with collections installed (`pip install ansible ansible-lint`).
