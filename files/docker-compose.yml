@@ -70,6 +70,40 @@ services:
     networks:
       - monitoring
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - --housekeeping_interval=30s
+      - --docker_only=true
+    networks:
+      - monitoring
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/data
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/data
+    ports:
+      - "127.0.0.1:9093:9093"
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+
 networks:
   monitoring:
     driver: bridge
@@ -78,3 +112,4 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+  alertmanager_data:

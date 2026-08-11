@@ -130,6 +130,8 @@ Required GitHub Secrets:
 | Promtail | - | Log shipping to Loki |
 | Node Exporter | `127.0.0.1:9100` | System metrics |
 | Loki Docker Driver | - | Docker log driver plugin |
+| cAdvisor | `cadvisor:8080` (internal) | Container metrics (CPU, Memory, Network) |
+| Alertmanager | `127.0.0.1:9093` | Alert routing & notifications (Telegram) |
 
 > All services bind to `127.0.0.1` by default. Use SSH tunnel or reverse proxy to access remotely.
 
@@ -183,17 +185,75 @@ ssh -N -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 3100:127.0.0.1:3100 <USE
 |---------|-----|
 | Grafana | `http://localhost:3000` |
 | Prometheus | `http://localhost:9090` |
+| Alertmanager | `http://localhost:9093` |
 | Loki | `http://localhost:3100` |
 
 > Note: With aliases, once the tunnel is up, multiple services can be opened in parallel browser tabs. To close the tunnel run `pkill -f "ssh -N -o ExitOnForwardFailure"`.
 
+## Alerting
+
+The stack ships with **cAdvisor** (container metrics), **Alertmanager**, and a set of **Prometheus alerting & recording rules**. Alerts are sent to a **Telegram bot**.
+
+### Alerts
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| `InstanceDown` | Node Exporter unreachable > 1m | critical |
+| `NodeHighCpuUsage` | CPU > 85% for 5m | warning |
+| `NodeHighMemoryUsage` | RAM > 85% for 5m | warning |
+| `NodeHighDiskUsage` | Disk `/` > 85% for 5m | warning |
+| `DiskWillFillIn24Hours` | Projected disk full within 24h | critical |
+| `ContainerDown` | Monitor container stops reporting | critical |
+| `HighContainerCpuUsage` | Container CPU > 85% of limit | warning |
+| `HighContainerMemoryUsage` | Container memory > 85% of limit | warning |
+
+### Recording Rules
+
+Rules in `files/prometheus-rules.yml` precompute common ratios (`instance:node_*`, `container:container_*:ratio`) to speed up dashboards and alerts.
+
+### Configure Telegram (create a bot)
+
+1. Open Telegram → chat with **@BotFather** → `/newbot` → choose name & username (end with `bot`).
+2. Copy the **HTTP API token**.
+3. Message your bot once, then get your **chat id**:
+   ```bash
+   curl https://api.telegram.org/bot<TOKEN>/getUpdates   # look for "chat":{"id":...}
+   ```
+4. Store both as encrypted vars (never in plain text):
+   ```bash
+   ansible-vault edit group_vars/all/vault.yml
+   # alertmanager_telegram_bot_token: <TOKEN>
+   # alertmanager_telegram_chat_id: <CHAT_ID>
+   ```
+5. Redeploy to apply.
+
+### Test an alert to Telegram
+
+```bash
+# From the VPS via SSH tunnel
+curl -X POST http://127.0.0.1:9093/api/v2/alerts \
+  -H "Content-Type: application/json" -d '[
+    {
+      "labels": { "alertname": "TestAlert", "severity": "warning", "instance": "vps" },
+      "annotations": { "summary": "Manual test alert", "description": "This is a test notification." }
+    }
+  ]'
+```
+
+A "🔴 TestAlert" message should arrive in your Telegram chat.
+
+## Loki Retention
+
+Loki default retention is **14 days** (`loki_retention: 336h` in `group_vars/all/vars.yml`), enforced by the Loki compactor and the `DiskWillFillIn24Hours` alert as a safety net. To change it, edit `loki_retention` and redeploy.
+
 ## Grafana Dashboard
 
-Dashboard **"VPS Monitoring Dashboard"** is auto-imported to folder **"VPS Monitoring"**.
+Dashboard **"VPS Monitoring Dashboard"** and **"VPS Container Monitoring"** are auto-imported to folder **"VPS Monitoring"**.
 
 | Dashboard | File | Description |
 |-----------|------|-------------|
 | VPS Monitoring Dashboard | `vps-monitoring.json` | CPU, Memory, Disk, Network, Logs |
+| VPS Container Monitoring | `vps-containers.json` | Per-container CPU, Memory, Network, Restarts |
 
 ### Dashboard Panels
 

@@ -1,0 +1,131 @@
+groups:
+  - name: node-recording-rules
+    rules:
+      - record: instance:node_cpu_usage:ratio
+        expr: "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) by (instance)"
+
+      - record: instance:node_memory_usage:ratio
+        expr: "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)"
+
+      - record: instance:node_filesystem_usage:ratio
+        expr: "1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})"
+
+      - record: container:container_cpu_usage:ratio
+        expr: "sum(rate(container_cpu_usage_seconds_total{name!=\"\"}[5m])) by (name) / sum(container_spec_cpu_quota{name!=\"\"}) by (name)"
+
+      - record: container:container_memory_usage:ratio
+        expr: "sum(container_memory_usage_bytes{name!=\"\"}) by (name) / sum(container_spec_memory_limit_bytes{name!=\"\"}) by (name)"
+
+  - name: node-alerting-rules
+    rules:
+      - alert: InstanceDown
+        expr: "up{job=\"node\"} == 0"
+        for: 1m
+        labels:
+          severity: critical
+          instance: vps
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "Node Exporter on {{ $labels.instance }} has been unreachable for more than 1 minute."
+
+      - alert: NodeHighCpuUsage
+        expr: "instance:node_cpu_usage:ratio > 0.85"
+        for: 5m
+        labels:
+          severity: warning
+          instance: vps
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 85% (current value: {{ printf \"%.1f\" $value | humanizePercentage }})."
+
+      - alert: NodeHighMemoryUsage
+        expr: "instance:node_memory_usage:ratio > 0.85"
+        for: 5m
+        labels:
+          severity: warning
+          instance: vps
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% (current value: {{ printf \"%.1f\" $value | humanizePercentage }})."
+
+      - alert: NodeHighDiskUsage
+        expr: "instance:node_filesystem_usage:ratio > 0.85"
+        for: 5m
+        labels:
+          severity: warning
+          instance: vps
+        annotations:
+          summary: "High disk usage on {{ $labels.instance }}"
+          description: "Filesystem / usage is above 85% (current value: {{ printf \"%.1f\" $value | humanizePercentage }})."
+
+      - alert: DiskWillFillIn24Hours
+        expr: "predict_linear(node_filesystem_free_bytes{mountpoint=\"/\"}[6h], 24 * 3600) < 0"
+        for: 10m
+        labels:
+          severity: critical
+          instance: vps
+        annotations:
+          summary: "Disk is expected to fill within 24 hours on {{ $labels.instance }}"
+          description: "The filesystem / is projected to run out of space within the next 24 hours."
+
+  - name: container-alerting-rules
+    rules:
+      - alert: ContainerDown
+        expr: "absent(container_cpu_usage_seconds_total{name=\"prometheus\"})"
+        for: 2m
+        labels:
+          severity: critical
+          instance: vps
+        annotations:
+          summary: "Container prometheus is down"
+          description: "The prometheus container is not reporting metrics to cAdvisor."
+
+      - alert: ContainerDown
+        expr: "absent(container_cpu_usage_seconds_total{name=\"grafana\"})"
+        for: 2m
+        labels:
+          severity: critical
+          instance: vps
+        annotations:
+          summary: "Container grafana is down"
+          description: "The grafana container is not reporting metrics to cAdvisor."
+
+      - alert: ContainerDown
+        expr: "absent(container_cpu_usage_seconds_total{name=\"loki\"})"
+        for: 2m
+        labels:
+          severity: critical
+          instance: vps
+        annotations:
+          summary: "Container loki is down"
+          description: "The loki container is not reporting metrics to cAdvisor."
+
+      - alert: ContainerDown
+        expr: "absent(container_cpu_usage_seconds_total{name=\"promtail\"})"
+        for: 2m
+        labels:
+          severity: critical
+          instance: vps
+        annotations:
+          summary: "Container promtail is down"
+          description: "The promtail container is not reporting metrics to cAdvisor."
+
+      - alert: HighContainerCpuUsage
+        expr: "container:container_cpu_usage:ratio > 0.85 and on(name) (container_spec_cpu_quota > 0)"
+        for: 5m
+        labels:
+          severity: warning
+          instance: vps
+        annotations:
+          summary: "Container {{ $labels.name }} is using high CPU"
+          description: "Container {{ $labels.name }} CPU usage is above 85% of its limit (current value: {{ printf \"%.1f\" $value | humanizePercentage }})."
+
+      - alert: HighContainerMemoryUsage
+        expr: "container:container_memory_usage:ratio > 0.85 and on(name) (container_spec_memory_limit_bytes > 0)"
+        for: 5m
+        labels:
+          severity: warning
+          instance: vps
+        annotations:
+          summary: "Container {{ $labels.name }} is using high memory"
+          description: "Container {{ $labels.name }} memory usage is above 85% of its limit (current value: {{ printf \"%.1f\" $value | humanizePercentage }})."

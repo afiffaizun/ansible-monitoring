@@ -1,0 +1,36 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: telegram
+  group_by: [alertname, instance]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: telegram
+      repeat_interval: 1h
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      - bot_token: '{{ alertmanager_telegram_bot_token }}'
+        chat_id: {{ alertmanager_telegram_chat_id }}
+        parse_mode: HTML
+        message: |-
+          {{ range .Alerts }}{{ if eq .Status "firing" }}<b>🔥 {{ .Labels.alertname }}</b>{{ else }}<b>✅ Resolved: {{ .Labels.alertname }}</b>{{ end }}
+          Severity: {{ .Labels.severity }}
+          Instance: {{ .Labels.instance }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+
+          {{ end }}
+
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: [alertname, instance]
